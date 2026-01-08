@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>cadgis_Maroc</title><meta name="title" content="cadgis_Maroc"><meta name="description" content="&lt;meta name=&quot;description&quot; content=&quot;CadGIS est une carte web interactive dédiée au Maroc, permettant de visualiser les titres fonciers, bornes, zonages et limites administratives par province et par région, avec tableau filtrable et liens de téléchargement.&quot;&gt;
+"><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><style id="__livecodes_styles__"></style><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
+  "imports": {}
+}</script></head><body>
+
+
+<meta charset="utf-8">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
+
+<style>
+html, body{
+  margin:0;
+  padding:0;
+  height:100%;
+  overflow:hidden;
+  font-family:Arial, sans-serif;
+}
+
+/* الحاوية العامة */
+#app{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ترويسة عادية */
+#header{
+  flex-shrink:0;
+  background:linear-gradient(135deg,#E49112 0%,#1B5B9A 100%);
+  color:#fff;
+  text-align:center;
+  padding:12px 10px;
+  font-size:clamp(14px,4vw,22px);
+  font-weight:bold;
+  box-shadow:0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* منطقة المحتوى تقوم بتمركز الخريطة */
+#content{
+  flex:1;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:#e5e7eb;
+  padding:10px;
+  box-sizing:border-box;
+}
+
+/* إطار الخريطة: عرضه وطوله متناسبان مع الشاشة مع هوامش */
+#map-wrapper{
+  position:relative;
+  width:100%;
+  height:100%;
+  max-width:1200px;    /* أقصى عرض على الديسكتوب */
+  max-height: calc(100% - 20px); /* يترك هامش بسيط داخل #content */
+  background:#fff;
+  border-radius:10px;
+  box-shadow:0 4px 18px rgba(0,0,0,0.25);
+  overflow:hidden;
+}
+
+/* على الموبايل: إطار الخريطة يأخذ تقريبًا كامل العرض والارتفاع مع هوامش */
+@media(max-width:768px){
+  #map-wrapper{
+    max-width:100%;
+    max-height:100%;
+    margin:0;
+    border-radius:8px;
+  }
+}
+
+/* عنصر الخريطة داخل الإطار */
+#map{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+}
+
+/* Popup */
+.ol-popup{
+  background:linear-gradient(135deg,#ffffff 0%,#f5f7fb 100%);
+  padding:14px 16px;
+  border:1px solid #e0e4ef;
+  min-width:200px;
+  max-width:90vw;
+  z-index:9999;
+  font-size:13px;
+  border-radius:10px;
+  box-shadow:0 10px 25px rgba(15,23,42,0.18);
+  color:#1f2933;
+}
+.ol-popup b{font-size:14px;color:#111827;}
+.ol-popup a,
+.ol-popup button{
+  display:inline-block;
+  margin-top:6px;
+  padding:6px 10px;
+  background:#dc2626;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  text-decoration:none;
+  font-size:12px;
+  cursor:pointer;
+  margin-right:5px;
+}
+.ol-popup a:hover,
+.ol-popup button:hover{background:#b91c1c;}
+.ol-popup .request-btn{background:#9333ea;}
+.ol-popup .request-btn:hover{background:#7e22ce;}
+.ol-popup .download-btn{background:#4CAF50;}
+.ol-popup .download-btn:hover{background:#388E3C;}
+
+/* أزرار تواصل داخل إطار الخريطة */
+#contactButtons{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  z-index:2300;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+#contactButtons a{
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#111827;
+  color:#fff;
+  text-decoration:none;
+  font-size:16px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.18);
+}
+#contactButtons a:hover{opacity:0.85;}
+
+/* زر تبديل الخلفية */
+#basemapToggle{
+  position:absolute;
+  top:10px;
+  right:250px;
+  z-index:2100;
+  padding:6px 10px;
+  font-size:12px;
+  border-radius:6px;
+  border:none;
+  background:#2563eb;
+  color:#fff;
+  cursor:pointer;
+}
+#basemapToggle:hover{background:#1d4ed8;}
+
+/* زر إظهار/إخفاء الجدول على الهاتف */
+#toggleProv{
+  position:absolute;
+  left:10px;
+  top:10px;
+  z-index:2600;
+  padding:6px 10px;
+  font-size:12px;
+  border-radius:6px;
+  border:none;
+  background:#111827;
+  color:#fff;
+  cursor:pointer;
+  display:none; /* يظهر فقط على الموبايل */
+}
+
+/* بحث OSM بسيط */
+#searchContainer{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:2000;
+  display:flex;
+  flex-direction:column;
+}
+#searchBoxOSM{
+  width:220px;
+  padding:6px 10px;
+  font-size:13px;
+  border-radius:20px;
+  border:1px solid #ccc;
+  outline:none;
+}
+#searchBoxOSM:focus{border-color:#2563eb;}
+#suggestions{
+  margin-top:2px;
+  width:220px;
+  max-height:150px;
+  overflow-y:auto;
+  padding:0;
+  list-style:none;
+  border:1px solid #ccc;
+  background:#fff;
+  border-radius:6px;
+  display:none;
+  font-size:13px;
+}
+#suggestions li{padding:6px 10px;cursor:pointer;}
+#suggestions li:hover{background:#f0f0f0;}
+@media(max-width:768px){
+  #searchBoxOSM,#suggestions{width:160px;}
+}
+
+/* صندوق جدول داخل إطار الخريطة */
+#prov-container{
+  position:absolute;
+  left:10px;
+  top:60px;
+  z-index:2500;
+  background:rgba(255,255,255,0.9);
+  padding:10px 12px;
+  border-radius:8px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.18);
+  max-height:70%;
+  font-size:12px;
+  min-width:340px;
+  display:flex;
+  flex-direction:column;
+}
+#prov-container h2{
+  margin:0 0 8px 0;
+  font-size:14px;
+}
+#prov-filters{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-bottom:8px;
+}
+#prov-filters select,
+#prov-filters input{
+  padding:3px 6px;
+  font-size:12px;
+}
+
+/* حاوية التمرير العمودي للجدول */
+#prov-scroll-wrapper{
+  max-height:55vh;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+
+/* جدول المحافظات */
+#prov-table{
+  border-collapse:collapse;
+  width:100%;
+}
+#prov-table th,
+#prov-table td{
+  border:1px solid #ddd;
+  padding:4px 6px;
+}
+#prov-table th{
+  background:#f3f4f6;
+}
+#prov-table tbody tr:nth-child(even){
+  background:rgba(250,250,250,0.9);
+}
+#prov-table tbody tr.highlight{
+  background:#fffbdd !important;
+}
+
+/* موبايل: الجدول أسفل الإطار مع تمرير عمودي */
+@media(max-width:768px){
+  #prov-container{
+    left:0;
+    right:0;
+    top:auto;
+    bottom:0;
+    margin:0 auto;
+    max-height:55%;
+    width:96%;
+    max-width:96%;
+    font-size:11px;
+    background:#f9fafb;
+    border-radius:14px 14px 0 0;
+    box-shadow:0 -4px 18px rgba(0,0,0,0.22);
+    border:1px solid #e5e7eb;
+  }
+  #toggleProv{
+    display:block;
+  }
+  #prov-scroll-wrapper{
+    max-height:45vh;
+  }
+}
+</style>
+
+
+<div id="app">
+  <header id="header">
+    CadGIS | Titres fonciers | Bornes | Zonage | Limites ADM
+  </header>
+
+  <main id="content">
+    <!-- إطار الخريطة المحدد الحدود -->
+    <div id="map-wrapper">
+      <div id="map"></div>
+
+      <!-- زر إظهار/إخفاء الجدول للموبايل -->
+      <button id="toggleProv">☰ Provinces</button>
+
+      <!-- جدول الأقاليم مع فلاتر -->
+      <div id="prov-container">
+        <h2>Filtres Provinces</h2>
+        <div id="prov-filters">
+          <input type="text" id="filterProv" placeholder="🔍 Filtrer par Province">
+          <select id="filterRegion">
+            <option value="">Toutes les régions
+            </option><option value="Casablanca-Settat">Casablanca-Settat
+            </option><option value="Marrakech-Safi">Marrakech-Safi
+            </option><option value="Rabat-Salé-Kénitra">Rabat-Salé-Kénitra
+            </option><option value="Fès-Meknès">Fès-Meknès
+            </option><option value="Souss-Massa">Souss-Massa
+            </option><option value="Béni Mellal-Khénifra">Béni Mellal-Khénifra
+            </option><option value="Oriental">Oriental
+            </option><option value="Drâa-Tafilalet">Drâa-Tafilalet
+            </option><option value="Guelmim-Oued Noun">Guelmim-Oued Noun
+            </option><option value="Laâyoune-Sakia El Hamra">Laâyoune-Sakia El Hamra
+            </option><option value="Dakhla-Oued Ed-Dahab">Dakhla-Oued Ed-Dahab
+            </option><option value="Tanger-Tétouan-Al Hoceïма">Tanger-Tétouan-Al Hoceïма
+          </option></select>
+        </div>
+
+        <div id="prov-scroll-wrapper">
+          <table id="prov-table">
+            <thead>
+              <tr>
+                <th>Province</th>
+                <th>Région</th>
+                <th>Nom Arabe</th>
+                <th>Download</th>
+              </tr>
+            </thead>
+            <tbody id="provTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- أيقونات تواصل -->
+      <div id="contactButtons">
+        <a href="mailto:contact@cartomaroc.com" id="mailBtn" title="Email">✉</a>
+        <a href="https://wa.me/212668090285" target="_blank" id="waBtn" title="WhatsApp">🟩</a>
+      </div>
+
+      <!-- زر تبديل الخلفية -->
+      <button id="basemapToggle">🗺️ OSM</button>
+
+      <!-- بحث OSM بسيط -->
+      <div id="searchContainer">
+        <input type="text" id="searchBoxOSM" placeholder="🔍 Rechercher...">
+        <ul id="suggestions"></ul>
+      </div>
+
+      <div id="popup" class="ol-popup"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const geojsonSource = new ol.source.Vector({
+    url: "https://ia601703.us.archive.org/6/items/prov_ma_202601/prov_ma.txt",
+    format: new ol.format.GeoJSON()
+  });
+
+  function getProvinceName(feature) {
+    const props = feature.getProperties();
+    const possible = ["NOM-PROV","NOM_PROV","name","NAME","nom","Nom","الاقليم","الإقليم"];
+    for (let f of possible) if (props[f]) return props[f];
+    return "Sans nom";
+  }
+
+  const provinceToRegion = {
+    "OUAD EDDAHAB": "Dakhla-Oued Ed-Dahab",
+    "AOUSSERD": "Dakhla-Oued Ed-Dahab",
+    "LAAYOUNE": "Laâyoune-Sakia El Hamra",
+    "BOUJDOUR": "Laâyoune-Sakia El Hamra",
+    "ESSMARA": "Laâyoune-Sakia El Hamra",
+    "TRAFAYA": "Laâyoune-Sakia El Hamra",
+    "GUELMIM": "Guelmim-Oued Noun",
+    "ASSA - ZAG": "Guelmim-Oued Noun",
+    "SIDI  IFNI": "Guelmim-Oued Noun",
+    "TAN - TAN": "Guelmim-Oued Noun",
+    "AGADIR IDA OU TANANE": "Souss-Massa",
+    "INEZEGANE AIT MELLOUL": "Souss-Massa",
+    "CHTOUKA AIT BAHA": "Souss-Massa",
+    "TAROUDANNT": "Souss-Massa",
+    "TIZNIT": "Souss-Massa",
+    "TATA": "Souss-Massa",
+    "TINGHIR": "Drâa-Tafilalet",
+    "OURZAZTE": "Drâa-Tafilalet",
+    "ZAGORA": "Drâa-Tafilalet",
+    "MIDELT": "Drâa-Tafilalet",
+    "ERRACHIDIA": "Drâa-Tafilalet",
+    "MARRAKECH": "Marrakech-Safi",
+    "AL HAOUZ": "Marrakech-Safi",
+    "CHICHAOUA": "Marrakech-Safi",
+    "EL KELAA DES SRAGHNA": "Marrakech-Safi",
+    "REHAMNA": "Marrakech-Safi",
+    "YOUSSOUFIA": "Marrakech-Safi",
+    "SAFI": "Marrakech-Safi",
+    "ESSAOUIRA": "Marrakech-Safi",
+    "BENI MELLAL": "Béni Mellal-Khénifra",
+    "AZILAL": "Béni Mellal-Khénifra",
+    "FQUIH BEN SALAH": "Béni Mellal-Khénifra",
+    "KHENIFRA": "Béni Mellal-Khénifra",
+    "KHOURIBGA": "Béni Mellal-Khénifra",
+    "CASABLANCA": "Casablanca-Settat",
+    "MOHAMMEDIA": "Casablanca-Settat",
+    "MÉDIOUNA": "Casablanca-Settat",
+    "NOUACER": "Casablanca-Settat",
+    "BERCHID": "Casablanca-Settat",
+    "BEN SLIMANE": "Casablanca-Settat",
+    "SETTAT": "Casablanca-Settat",
+    "SIDI BENNOUR": "Casablanca-Settat",
+    "EL JADIDA": "Casablanca-Settat",
+    "RABAT": "Rabat-Salé-Kénitra",
+    "SALÉ": "Rabat-Salé-Kénitra",
+    "SKHIRATE- TEMARA": "Rabat-Salé-Kénitra",
+    "KÉNITRA": "Rabat-Salé-Kénitra",
+    "KHEMISSET": "Rabat-Salé-Kénitra",
+    "SIDI KACEM": "Rabat-Salé-Kénitra",
+    "SIDI SLIMANE": "Rabat-Salé-Kénitra",
+    "FÈS": "Fès-Meknès",
+    "MEKNES": "Fès-Meknès",
+    "EL HAJEB": "Fès-Meknès",
+    "SEFROU": "Fès-Mekنès",
+    "IFRANE": "Fès-Meknès",
+    "BOULEMANE": "Fès-Meknès",
+    "TAZA": "Fès-Meknès",
+    "TAOUNATE": "Fès-Meknès",
+    "MOULAY YACOUB": "Fès-Meknès",
+    "OUJDA - ANGAD": "Oriental",
+    "NADOR": "Oriental",
+    "BERKANE": "Oriental",
+    "TAOURIRT": "Oriental",
+    "JRADA": "Oriental",
+    "FIGUIG": "Oriental",
+    "GUERSSIF": "Oriental",
+    "DRIOUCH": "Oriental",
+    "TANGER - ASILAH": "Tanger-Tétouan-Al Hoceïма",
+    "M'DIQ-FNIDEQ": "Tanger-Tétouan-Al Hoceïма",
+    "TETOUAN": "Tanger-Tétouan-Al Hoceïма",
+    "LARACHE": "Tanger-Tétouan-Al Hoceïма",
+    "AL HOUCEIMA": "Tanger-Tétouan-Al Hoceïма",
+    "CHEFCHAOUEN": "Tanger-Tétouan-Al Hoceïма",
+    "OUAZZANE": "Tanger-Tétouan-Al Hoceïма",
+    "EL FAHS - ANGRA": "Tanger-Tétouan-Al Hoceïма"
+  };
+
+  const provinceDownloadLinks = {
+    "AGADIR IDA OU TANANE": "https://drive.google.com/file/d/1UWDokzDiJuNO6_vqc590B87iEF9_IcTK/view?usp=drivesdk",
+    "AL HOUCEIMA": "https://drive.google.com/file/d/1YfXPI41zaqDRkX0LVMtdQyGlzD65ZWi-/view?usp=drivesdk",
+    "TANGER - ASILAH": "https://drive.google.com/file/d/1YlidcDUw3SPD7FeNnignFL7TesbRaxp3/view?usp=drivesdk",
+    "NADOR": "https://drive.google.com/file/d/1wanlzg6Fa9G_Wi6818LwpNn1kNTJntJm/view?usp=drivesdk",
+    "SEFROU": "https://drive.google.com/file/d/1ppx8GAqzlTGkrfG9aqX3GDkSt2m6tpJg/view?usp=drivesdk",
+    "OURZAZTE": "https://drive.google.com/file/d/1pUAIzQBujnLogFnYkx6Tyjj_bn7nS_7N/view?usp=drivesdk",
+    "KHENIFRA": "https://drive.google.com/file/d/1ROc0iqfuE_koHagIEjtORQA9jyyhrBsD/view?usp=drivesdk",
+    "MIDELT": "https://drive.google.com/file/d/1XBBoFWEYrWED6bpn0Cjv_gKOEaLqgacF/view?usp=drivesdk",
+    "LAAYOUNE": "https://drive.google.com/file/d/1skAk7DnHMT8KbdckQueH7Vt8OB1RcwUy/view?usp=drivesdk",
+    "TAZA": "https://drive.google.com/file/d/1t2o1j6mwy2BW9mkfCVzOFTS-KQhr3w4H/view?usp=drivesdk",
+    "TAOURIRT": "https://drive.google.com/file/d/14YVjpHq26bcoIjSO-VoKTVNhgzxBQdNY/view?usp=drivesdk",
+    "KHEMISSET": "https://drive.google.com/file/d/1d5IUnW_2pAhg64VUqCmf3dk8fr9fG6d_/view?usp=drivesdk",
+    "FQUIH BEN SALAH": "https://drive.google.com/file/d/1rjAx7oPAKQ00teooftXITob8yT-Qpruf/view?usp=drivesdk",
+    "BENI MELLAL": "https://drive.google.com/file/d/1anC3cMqAJrhrjhZ21NPK8CnMuJcWLHOu/view?usp=drivesdk",
+    "BERKANE": "https://drive.google.com/file/d/1sv-PSyXqi5uSg-ddUoUBJ9rh2096_OPW/view?usp=drivesdk",
+    "GUELMIM": "https://drive.google.com/file/d/1nXiPzn8Q-wXaJvoy7m7gEBZNzlY-WKc1/view?usp=drivesdk",
+    "GUERSSIF": "https://drive.google.com/file/d/1X-Z6WjtJUp7Zj-ggm9PvWJZiE_DlP0AZ/view?usp=drivesdk",
+    "MEKNES": "https://drive.google.com/file/d/1a8GSI4_0a6L1hgkaAO0LrJBZ4X0fa6K4/view?usp=drivesdk",
+    "EL HAJEB": "https://drive.google.com/file/d/1BS7zD6tcsHBTIc8_GRnPWHN06veAOavG/view?usp=drivesdk",
+    "CHTOUKA AIT BAHA": "https://drive.google.com/file/d/16H78YAucHZ2dmHBlQoEYAZjyTOeRKxrn/view?usp=drivesdk",
+    "SIDI SLIMANE": "https://drive.google.com/file/d/1Zg_ZHhCCm11UG740ntFhOojgK3Qn6ZZF/view?usp=drivesdk",
+    "ESSAOUIRA": "https://drive.google.com/file/d/1L_t0wJAVCE9ARPZqIj0oO0zs5WvGz-Tr/view?usp=drivesdk",
+    "ERRACHIDIA": "https://drive.google.com/file/d/1CQUSWjOngEjJ0wqb5KCyYZM6IwyvN5bN/view?usp=drivesdk",
+    "TIZNIT": "https://drive.google.com/file/d/1fhYvVKrfxseEfJYmFjNQIzxQaglz825M/view?usp=drivesdk",
+    "OUAD EDDAHAB": "https://drive.google.com/file/d/1W8TCjsJgGSjER0IZ8-oAd6YYIMAZzmul/view?usp=drivesdk",
+    "BERCHID": "https://drive.google.com/file/d/1urqgs3lWp_6bKJkded0vET9UI5rS2brY/view?usp=drivesdk",
+    "SKHIRATE- TEMARA": "https://drive.google.com/file/d/106K0yigp55ZDAGNQY_XVVY5WmZ-bAEJH/view?usp=drivesdk",
+    "TAROUDANNT": "https://drive.google.com/file/d/1xkm_jDhqofnXlYJwMFtXJvnotQNplNSw/view?usp=drivesdk",
+    "LARACHE": "https://drive.google.com/file/d/1BVFiiO3aRAGQRAOws-wZyeZoMBfveQS2/view?usp=drivesdk",
+    "RABAT": "https://drive.google.com/file/d/13QhQIUO1ItLQi133fQ8p2yxHsEdw0oVn/view?usp=drivesdk",
+    "INEZEGANE AIT MELLOUL": "https://drive.google.com/file/d/1yyd-GQF5BVfF4SrYlwGPEkr7ucxYhiql/view?usp=drivesdk",
+    "KHOURIBGA": "https://drive.google.com/file/d/1V-nlu6qBQIBwhCqT-yV7pHOJK_8z3AyZ/view?usp=drivesdk",
+    "FÈS": "https://drive.google.com/file/d/1a6QUwgao4okjcyR1V_Hz3BAWZVeo-MS5/view?usp=drivesdk",
+    "SIDI KACEM": "https://drive.google.com/file/d/1-exZqMZPQ62H4X3PH5iFoiic1XzSvDXv/view?usp=drivesdk",
+    "SIDI BENNOUR": "https://drive.google.com/file/d/1eLfmImakIX_B2h0KNBCYrx3LF8H0Mm--/view?usp=drivesdk",
+    "IFRANE": "https://drive.google.com/file/d/1c1w2yGvR3cahFsSbCSt7kD2maEkedhr7/view?usp=drivesdk",
+    "KÉNITRA": "https://drive.google.com/file/d/1fhdAWLXrNEcGR42QRX6b8q9zh3BfP2Ry/view?usp=drivesdk",
+    "SETTAT": "https://drive.google.com/file/d/1Rm37o7-ybmDhlLAJWg2-LUVoH0ZxqIx7/view?usp=drivesdk",
+    "TETOUAN": "https://drive.google.com/file/d/1ykxVLBOxAwNM5H61uMDdh2b05v5ftgku/view?usp=drivesdk",
+    "MOHAMMEDIA": "https://drive.google.com/file/d/1Nz8_GFQNNw_4FEgXeTHTcubYd1oxMKyt/view?usp=drivesdk",
+    "NOUACER": "https://drive.google.com/file/d/1ZTRHOun341z907E2ncXxrxjJgDd--E83/view?usp=drivesdk",
+    "CASABLANCA": "https://drive.google.com/file/d/19dK56HuNRDSxyaXPbBGA7bpaZkEo5bIq/view?usp=drivesdk",
+    "AZILAL": "https://drive.google.com/file/d/1yf752JHPOL8o8ol8bZv3_orPaqIpD60t/view?usp=drivesdk",
+    "BOULEMANE": "https://drive.google.com/file/d/1MO94Ql8RAyZaRSVW6R5uhA5wlvaA3q1L/view?usp=drivesdk",
+    "TAOUNATE": "https://drive.google.com/file/d/1nTYogtuaLXvMO6LGNkplVDIB8AGKsNrl/view?usp=drivesdk"
+  };
+
+  const geojsonLayer = new ol.layer.Vector({
+    source: geojsonSource,
+    style: function (feature) {
+      return new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: "black", width: 1.3 }),
+        fill: new ol.style.Fill({ color: "rgba(244, 67, 54, 0.1)" }),
+        text: new ol.style.Text({
+          text: getProvinceName(feature),
+          font: "bold 12px Arial",
+          fill: new ol.style.Fill({ color: "#000" }),
+          stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+        })
+      });
+    }
+  });
+
+  const osmStandard = new ol.layer.Tile({ source:new ol.source.OSM(), visible:true });
+  const esriImagery = new ol.layer.Tile({
+    source:new ol.source.XYZ({
+      url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    }),
+    visible:false
+  });
+  const satLike = new ol.layer.Tile({
+    source:new ol.source.XYZ({
+      url:"https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+    }),
+    visible:false
+  });
+
+  const map = new ol.Map({
+    target:"map",
+    layers:[osmStandard, esriImagery, satLike, geojsonLayer],
+    view:new ol.View({
+      center:ol.proj.fromLonLat([-7.9,31.6]),
+      zoom:6
+    })
+  });
+
+  // تحديث حجم الخريطة عند تغيير حجم النافذة
+  window.addEventListener('resize', function () {
+    setTimeout(function(){
+      map.updateSize();
+    }, 200);
+  });
+
+  const selectInteraction = new ol.interaction.Select({
+    layers:[geojsonLayer],
+    style:function(feature){
+      return new ol.style.Style({
+        stroke:new ol.style.Stroke({color:"#facc15",width:2.5}),
+        fill:new ol.style.Fill({color:"rgba(250,204,21,0.45)"}),
+        text:new ol.style.Text({
+          text:getProvinceName(feature),
+          font:"bold 12px Arial",
+          fill:new ol.style.Fill({color:"#000"}),
+          stroke:new ol.style.Stroke({color:"#fff",width:2})
+        })
+      });
+    }
+  });
+  map.addInteraction(selectInteraction);
+
+  const popup = new ol.Overlay({
+    element:document.getElementById("popup"),
+    positioning:"bottom-center",
+    offset:[0,-15]
+  });
+  map.addOverlay(popup);
+
+  window.downloadProvinceData = function (provinceName) {
+    const link = provinceDownloadLinks[provinceName];
+    if (link) window.open(link,"_blank");
+    else alert("⚠️ رابط التحميل غير متوفر لهذا الإقليم");
+  };
+
+  window.contactWhatsApp = function (provinceName) {
+    const frenchMessage = `Bonjour, je souhaite recevoir la base de données complète des Titres, Bornes et Limites pour (*${provinceName}*). Merci !`;
+    const arabicMessage = `\nمرحبًا، أود الحصول على قاعدة المعطيات الكاملة الخاصة بـ:\n(*${provinceName}*)`;
+    const message = frenchMessage + arabicMessage;
+    const whatsappURL = `https://wa.me/212668090285?text=${encodeURIComponent(message)}`;
+    window.open(whatsappURL,"_blank");
+  };
+
+  const filterProvInput = document.getElementById("filterProv");
+  const filterRegionSelect = document.getElementById("filterRegion");
+  const provTableBody = document.getElementById("provTableBody");
+
+  function showPopup(feature, coord){
+    const nomFr = feature.get("NOM_PROV") || getProvinceName(feature);
+    const nomAr = feature.get("nomArabic") || "";
+    let html = `
+      <b>${nomFr}</b><br>
+      <span style="font-weight:bold; color:#FF0000;">
+      Titres fonciers | Bornes | Zonage | ${nomAr}
+      </span><br>
+      ℹ️ Données disponibles sur demande<br>
+      <button class="request-btn" onclick="downloadProvinceData('${nomFr}')">
+      📱 Demander ces données
+      </button><br>
+      <button class="download-btn" onclick="contactWhatsApp('${nomFr}')">
+      📞 Contacter via WhatsApp
+      </button><br><br>
+      <a href="mailto:contact@cartomaroc.com">contact@cartomaroc.com</a>
+    `;
+    popup.getElement().innerHTML = html;
+    popup.setPosition(coord);
+
+    const reg = provinceToRegion[nomFr] || "";
+    if (reg){
+      filterRegionSelect.value = reg;
+      applyTableFilters();
+    }
+    highlightRow(nomFr);
+  }
+
+  map.on("click",(evt)=>{
+    const f = map.forEachFeatureAtPixel(evt.pixel,ft=>ft);
+    if(f){
+      showPopup(f,evt.coordinate);
+      selectInteraction.getFeatures().clear();
+      selectInteraction.getFeatures().push(f);
+    }else{
+      popup.setPosition(undefined);
+      selectInteraction.getFeatures().clear();
+      clearHighlight();
+    }
+  });
+
+  const basemapBtn = document.getElementById("basemapToggle");
+  const basemaps = [
+    {layer:osmStandard,label:"OSM"},
+    {layer:esriImagery,label:"Esri"},
+    {layer:satLike,label:"Sat"}
+  ];
+  let currentBase = 0;
+  function setBasemap(i){
+    basemaps.forEach((b,idx)=>b.layer.setVisible(idx===i));
+    basemapBtn.textContent = "🗺️ " + basemaps[i].label;
+  }
+  basemapBtn.addEventListener("click",()=>{
+    currentBase = (currentBase+1)%basemaps.length;
+    setBasemap(currentBase);
+  });
+  setBasemap(0);
+
+  const searchBox = document.getElementById("searchBoxOSM");
+  const suggestions = document.getElementById("suggestions");
+  searchBox.addEventListener("input",function(){
+    const query=this.value.trim();
+    if(!query){suggestions.style.display="none";return;}
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query+", Maroc")}&limit=5`)
+    .then(res=>res.json())
+    .then(data=>{
+      suggestions.innerHTML="";
+      if(data.length>0){
+        data.forEach(item=>{
+          const li=document.createElement("li");
+          li.textContent=item.display_name;
+          li.addEventListener("click",()=>{
+            const lon=parseFloat(item.lon);
+            const lat=parseFloat(item.lat);
+            map.getView().animate({
+              center:ol.proj.fromLonLat([lon,lat]),
+              zoom:12,
+              duration:1000
+            });
+            suggestions.style.display="none";
+            searchBox.value=item.display_name;
+          });
+          suggestions.appendChild(li);
+        });
+        suggestions.style.display="block";
+      }else{
+        suggestions.style.display="none";
+      }
+    }).catch(err=>console.error(err));
+  });
+  document.addEventListener("click",(e)=>{
+    if(e.target!==searchBox) suggestions.style.display="none";
+  });
+
+  geojsonSource.once("change",function(){
+    if(geojsonSource.getState()==="ready"){
+      fillProvTable();
+      map.updateSize();
+    }
+  });
+
+  function fillProvTable(){
+    provTableBody.innerHTML="";
+    const features = geojsonSource.getFeatures();
+    const added = new Set();
+    features.forEach(ft=>{
+      const nomFr = ft.get("NOM_PROV") || getProvinceName(ft);
+      if(added.has(nomFr)) return;
+      added.add(nomFr);
+      const nomAr = ft.get("nomArabic") || "—";
+      const region = provinceToRegion[nomFr] || "—";
+      const downloadLink = provinceDownloadLinks[nomFr] || null;
+      const tr = document.createElement("tr");
+      tr.dataset.province = nomFr;
+      tr.dataset.region = region;
+      tr.dataset.nomAr = nomAr;
+      tr.innerHTML = `
+        <td>${nomFr}</td>
+        <td>${region}</td>
+        <td>${nomAr}</td>
+        <td style="text-align:center;">
+          ${downloadLink ? `<a href="${downloadLink}" target="_blank">Télécharger</a>` : "✉️"}
+        </td>
+      `;
+      tr.addEventListener("click",()=>{
+        const ftClicked = features.find(f=>{
+          const n = f.get("NOM_PROV") || getProvinceName(f);
+          return n === nomFr;
+        });
+        if(ftClicked){
+          const extent = ftClicked.getGeometry().getExtent();
+          map.getView().fit(extent,{duration:800,padding:[50,50,50,50]});
+          selectInteraction.getFeatures().clear();
+          selectInteraction.getFeatures().push(ftClicked);
+          showPopup(ftClicked,ol.extent.getCenter(extent));
+        }
+      });
+      provTableBody.appendChild(tr);
+    });
+  }
+
+  function applyTableFilters(){
+    const txt = filterProvInput.value.trim().toLowerCase();
+    const reg = filterRegionSelect.value;
+    const rows = provTableBody.querySelectorAll("tr");
+    rows.forEach(r=>{
+      const prov = r.dataset.province.toLowerCase();
+      const nomAr = (r.dataset.nomAr || "").toLowerCase();
+      const region = r.dataset.region;
+      const matchText = !txt || prov.includes(txt) || nomAr.includes(txt);
+      if(!txt){
+        const matchRegion = !reg || region === reg;
+        r.style.display = matchRegion ? "" : "none";
+      }else{
+        r.style.display = matchText ? "" : "none";
+      }
+    });
+  }
+  filterProvInput.addEventListener("keyup",applyTableFilters);
+  filterRegionSelect.addEventListener("change",applyTableFilters);
+
+  function clearHighlight(){
+    const rows = provTableBody.querySelectorAll("tr");
+    rows.forEach(r=>r.classList.remove("highlight"));
+  }
+  function highlightRow(provName){
+    const rows = provTableBody.querySelectorAll("tr");
+    rows.forEach(r=>{
+      r.classList.remove("highlight");
+      if(r.dataset.province === provName){
+        r.classList.add("highlight");
+        r.scrollIntoView({behavior:"smooth",block:"center"});
+      }
+    });
+  }
+
+  const toggleProvBtn = document.getElementById("toggleProv");
+  const provContainer = document.getElementById("prov-container");
+  toggleProvBtn.addEventListener("click",()=>{
+    if (getComputedStyle(provContainer).display === "none"){
+      provContainer.style.display = "flex";
+      toggleProvBtn.textContent = "✖ Fermer";
+      map.updateSize();
+    }else{
+      provContainer.style.display = "none";
+      toggleProvBtn.textContent = "☰ Provinces";
+      map.updateSize();
+    }
+  });
+});
+</script>
+
+
+<script></script></body></html>
